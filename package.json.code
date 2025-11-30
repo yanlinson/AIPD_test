@@ -1,0 +1,25 @@
+{
+  "name": "gobang-pro-plus",
+  "version": "2.0.0",
+  "description": "A high-performance, single-file Gobang (Five in a Row) game with multi-difficulty AI and replay system.",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "game",
+    "gobang",
+    "gomoku",
+    "ai",
+    "minimax",
+    "vanilla-js",
+    "single-file"
+  ],
+  "author": "ACTOR Framework User",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/gobang-pro.git"
+  }
+}
