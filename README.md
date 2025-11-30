@@ -1,5 +1,16 @@
 # 🎮 Gobang Pro+ (五子棋专业版)
 
+# 📱 手机扫码直接玩
+
+拿出手机扫描下方二维码，立即体验：
+
+![Play on Mobile](https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://yanlinson.github.io/AIPD_test/)
+
+> **提示**：在 Safari (iOS) 或 Chrome (Android) 中点击 "分享" -> "添加到主屏幕"，体验更佳！
+
+[点击这里在浏览器打开](https://yanlinson.github.io/AIPD_test/)
+
+
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Version](https://img.shields.io/badge/version-2.0.0-green.svg)
 ![Tech](https://img.shields.io/badge/tech-Vanilla%20JS%20%7C%20HTML5-orange.svg)

@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <!-- 移动端核心优化：禁止缩放，适配刘海屏 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- iOS/Android PWA 设置 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#eecfa1">
+    <title>五子棋 Pro+</title>
+    
+    <style>
+        :root {
+            --board-bg: #eecfa1;
+            --board-border: #d4a76a;
+            --line-color: rgba(60, 40, 20, 0.4);
+            --black-stone: radial-gradient(circle at 30% 30%, #666, #000);
+            --white-stone: radial-gradient(circle at 30% 30%, #fff, #d1d1d1);
+            --shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            --primary: #292524;
+            --accent: #22c55e;
+            --danger: #ef4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f5f5f4;
+            color: #444;
+            /* 移动端防误触 */
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior: none;
+            overflow: hidden;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.8rem;
+            width: 92vw;
+            max-width: 500px;
+            position: relative;
+        }
+
+        /* Header */
+        .header { display: flex; justify-content: space-between; width: 100%; align-items: center; height: 40px; }
+        .status-badge {
+            display: flex; align-items: center; gap: 6px; padding: 4px 10px;
+            border-radius: 20px; background: #f0f0f0; font-size: 0.85rem; font-weight: 500; transition: all 0.3s;
+        }
+        .status-badge.active { background: var(--primary); color: white; transform: scale(1.05); box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        .mini-stone { width: 12px; height: 12px; border-radius: 50%; }
+        .mini-stone.black { background: #000; }
+        .mini-stone.white { background: #fff; border: 1px solid #ccc; }
+        
+        .diff-tag {
+            font-size: 0.75rem; padding: 2px 8px; border-radius: 4px;
+            background: #e7e5e4; color: #57534e;
+        }
+
+        /* Board */
+        .board-wrapper {
+            padding: 6px; background: var(--board-bg); border-radius: 4px;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.2); border: 4px solid var(--board-border); position: relative;
+        }
+        #board {
+            display: grid; grid-template-columns: repeat(15, 1fr); grid-template-rows: repeat(15, 1fr);
+            width: min(85vw, 400px); height: min(85vw, 400px); position: relative;
+        }
+        .cell { position: relative; cursor: pointer; display: flex; justify-content: center; align-items: center; }
+        .cell::before { content: ''; position: absolute; top: 50%; left: 0; width: 100%; height: 1px; background: var(--line-color); z-index: 0; }
+        .cell::after { content: ''; position: absolute; left: 50%; top: 0; height: 100%; width: 1px; background: var(--line-color); z-index: 0; }
+        .star-point { position: absolute; width: 20%; height: 20%; background: #333; border-radius: 50%; z-index: 1; }
+
+        /* Stones */
+        .stone {
+            width: 85%; height: 85%; border-radius: 50%; z-index: 2; box-shadow: var(--shadow);
+            transform: scale(0); transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .stone.show { transform: scale(1); }
+        .stone.black { background: var(--black-stone); }
+        .stone.white { background: var(--white-stone); }
+        .stone.last-move::after {
+            content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 30%; height: 30%; background: rgba(255,0,0,0.6); border-radius: 50%;
+        }
+        .stone.winning { box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.6); }
+        .hint-mark {
+            position: absolute; width: 40%; height: 40%; background: rgba(34, 197, 94, 0.6);
+            border-radius: 50%; z-index: 3; animation: pulse 1s infinite; pointer-events: none;
+        }
+        @keyframes pulse { 0% { transform: scale(0.8); opacity: 0.8; } 100% { transform: scale(1.2); opacity: 0; } }
+
+        /* Toolbar */
+        .toolbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%; }
+        .btn {
+            background: white; border: 1px solid #ddd; color: #444; padding: 12px 0;
+            border-radius: 8px; cursor: pointer; font-size: 0.8rem; font-weight: 600;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+            touch-action: manipulation; /* 优化点击 */
+        }
+        .btn:active { background: #f0f0f0; transform: scale(0.98); }
+        .btn.primary { background: var(--primary); color: white; border: none; }
+        .btn svg { width: 20px; height: 20px; }
+
+        /* Replay Bar */
+        .replay-controls { display: none; width: 100%; justify-content: space-between; background: #f0f0f0; padding: 8px; border-radius: 8px; }
+        .replay-btn { background: none; border: none; cursor: pointer; padding: 10px; color: #444; border-radius: 4px; touch-action: manipulation; }
+        .replay-btn:active { background: rgba(0,0,0,0.1); }
+
+        /* Modal */
+        .modal-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 100; display: flex; justify-content: center; align-items: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        .modal-overlay.open { opacity: 1; pointer-events: auto; }
+        .modal {
+            background: white; padding: 1.5rem; border-radius: 12px; width: 85%; text-align: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2); transform: translateY(20px); transition: transform 0.3s;
+        }
+        .modal-overlay.open .modal { transform: translateY(0); }
+        .modal h2 { margin-top: 0; color: var(--primary); font-size: 1.2rem; margin-bottom: 1rem; }
+        
+        .setting-group { margin-bottom: 1.2rem; text-align: left; }
+        .setting-label { font-size: 0.85rem; color: #666; margin-bottom: 8px; display: block; font-weight: bold; }
+        .option-row { display: flex; gap: 8px; }
+        .option-btn {
+            flex: 1; padding: 12px; border: 1px solid #eee; border-radius: 6px; background: #fafafa;
+            cursor: pointer; font-size: 0.9rem; transition: all 0.2s; touch-action: manipulation;
+        }
+        .option-btn.selected { border-color: var(--primary); background: var(--primary); color: white; }
+        
+        .diff-btn[data-val="easy"].selected { background: #86efac; border-color: #86efac; color: #064e3b; }
+        .diff-btn[data-val="normal"].selected { background: #93c5fd; border-color: #93c5fd; color: #1e3a8a; }
+        .diff-btn[data-val="hard"].selected { background: #fca5a5; border-color: #fca5a5; color: #7f1d1d; }
+
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div class="header">
+            <div class="status-badge" id="badge-black">
+                <div class="mini-stone black"></div> <span>黑方</span>
+            </div>
+            <div class="diff-tag" id="currentDiffTag">业余 AI</div>
+            <div class="status-badge" id="badge-white">
+                <div class="mini-stone white"></div> <span>白方</span>
+            </div>
+        </div>
+
+        <div class="board-wrapper">
+            <div id="board"></div>
+        </div>
+
+        <!-- Replay UI -->
+        <div class="replay-controls" id="replayBar">
+            <button class="replay-btn" onclick="game.replayJump('start')">⏮</button>
+            <button class="replay-btn" onclick="game.replayStep(-1)">◀</button>
+            <span style="font-size:0.9rem; line-height: 32px;" id="replayStepInfo">0/0</span>
+            <button class="replay-btn" onclick="game.replayStep(1)">▶</button>
+            <button class="replay-btn" onclick="game.replayJump('end')">⏭</button>
+            <button class="replay-btn" style="color:var(--danger)" onclick="game.exitReplay()">退出</button>
+        </div>
+
+        <!-- Game Toolbar -->
+        <div class="toolbar" id="gameToolbar">
+            <button class="btn" onclick="game.showSettings()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+                设置
+            </button>
+            <button class="btn" onclick="game.undo()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
+                悔棋
+            </button>
+            <button class="btn" onclick="game.getHint()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                提示
+            </button>
+            <button class="btn" onclick="game.enterReplayMode()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+                复盘
+            </button>
+        </div>
+        
+        <div style="text-align:center; font-size:0.8rem; color:#999; height:1rem;" id="msgArea"></div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay open" id="settingsModal">
+        <div class="modal">
+            <h2>游戏设置</h2>
+            
+            <div class="setting-group">
+                <span class="setting-label">对战模式</span>
+                <div class="option-row">
+                    <button class="option-btn selected" onclick="ui.setMode('pve')" id="btn-pve">人机对战</button>
+                    <button class="option-btn" onclick="ui.setMode('pvp')" id="btn-pvp">双人对战</button>
+                </div>
+            </div>
+
+            <div class="setting-group" id="diff-selector">
+                <span class="setting-label">AI 难度</span>
+                <div class="option-row">
+                    <button class="option-btn diff-btn" data-val="easy" onclick="ui.setDiff('easy')" id="btn-easy">新手</button>
+                    <button class="option-btn diff-btn selected" data-val="normal" onclick="ui.setDiff('normal')" id="btn-normal">业余</button>
+                    <button class="option-btn diff-btn" data-val="hard" onclick="ui.setDiff('hard')" id="btn-hard">大师</button>
+                </div>
+            </div>
+            
+            <div class="setting-group" id="side-selector">
+                <span class="setting-label">我方执子</span>
+                <div class="option-row">
+                    <button class="option-btn selected" onclick="ui.setSide('black')" id="btn-black">执黑 (先手)</button>
+                    <button class="option-btn" onclick="ui.setSide('white')" id="btn-white">执白 (后手)</button>
+                </div>
+            </div>
+
+            <button class="btn primary" style="width:100%; margin-top:1rem" onclick="game.startGame()">开始新游戏</button>
+        </div>
+    </div>
+
+    <script>
+        const config = { mode: 'pve', difficulty: 'normal', mySide: 'black' };
+        const ui = {
+            setMode: (mode) => {
+                config.mode = mode;
+                document.getElementById('btn-pve').classList.toggle('selected', mode === 'pve');
+                document.getElementById('btn-pvp').classList.toggle('selected', mode === 'pvp');
+                document.getElementById('diff-selector').style.display = mode === 'pve' ? 'block' : 'none';
+                document.getElementById('side-selector').style.display = mode === 'pve' ? 'block' : 'none';
+            },
+            setDiff: (diff) => {
+                config.difficulty = diff;
+                document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('selected'));
+                document.getElementById(`btn-${diff}`).classList.add('selected');
+            },
+            setSide: (side) => {
+                config.mySide = side;
+                document.getElementById('btn-black').classList.toggle('selected', side === 'black');
+                document.getElementById('btn-white').classList.toggle('selected', side === 'white');
+            },
+            updateDiffTag: () => {
+                const tags = { 'easy': '新手 AI', 'normal': '业余 AI', 'hard': '大师 AI' };
+                const el = document.getElementById('currentDiffTag');
+                if (config.mode === 'pvp') el.style.display = 'none';
+                else { el.style.display = 'block'; el.textContent = tags[config.difficulty]; }
+            }
+        };
+
+        class GobangGame {
+            constructor() {
+                this.BOARD_SIZE = 15;
+                this.boardData = [];
+                this.history = [];
+                this.currentPlayer = 'black';
+                this.winner = null;
+                this.isAiThinking = false;
+                this.isReplaying = false;
+                this.replayIndex = 0;
+                this.domBoard = document.getElementById('board');
+                this.msgEl = document.getElementById('msgArea');
+                this.initBoardUI();
+            }
+            initBoardUI() {
+                this.domBoard.innerHTML = '';
+                for (let r = 0; r < this.BOARD_SIZE; r++) {
+                    for (let c = 0; c < this.BOARD_SIZE; c++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.dataset.r = r; cell.dataset.c = c;
+                        if ((r===3||r===11||r===7)&&(c===3||c===11||c===7)) {
+                            const star = document.createElement('div');
+                            star.className = 'star-point';
+                            cell.appendChild(star);
+                        }
+                        cell.addEventListener('click', () => this.handleInput(r, c));
+                        this.domBoard.appendChild(cell);
+                    }
+                }
+            }
+            showSettings() { document.getElementById('settingsModal').classList.add('open'); }
+            startGame() {
+                document.getElementById('settingsModal').classList.remove('open');
+                ui.updateDiffTag();
+                this.reset();
+                if (config.mode === 'pve' && config.mySide === 'white') {
+                    this.handleMove(7, 7, true);
+                }
+            }
+            reset() {
+                this.boardData = Array(this.BOARD_SIZE).fill(null).map(() => Array(this.BOARD_SIZE).fill(null));
+                this.history = [];
+                this.currentPlayer = 'black';
+                this.winner = null;
+                this.isAiThinking = false;
+                this.exitReplay();
+                document.querySelectorAll('.stone').forEach(el => el.remove());
+                document.querySelectorAll('.hint-mark').forEach(el => el.remove());
+                this.updateStatus();
+                this.msgEl.textContent = "游戏开始";
+            }
+            handleInput(r, c) {
+                if (this.isReplaying || this.winner || this.boardData[r][c] || this.isAiThinking) return;
+                if (config.mode === 'pve' && this.currentPlayer !== config.mySide) return;
+                this.handleMove(r, c);
+            }
+            handleMove(r, c, isAi = false) {
+                this.boardData[r][c] = this.currentPlayer;
+                this.history.push({r, c, player: this.currentPlayer});
+                this.renderStone(r, c, this.currentPlayer);
+                this.clearHint();
+                const winLine = this.checkWin(r, c, this.currentPlayer);
+                if (winLine) {
+                    this.winner = this.currentPlayer;
+                    this.highlightWin(winLine);
+                    this.msgEl.textContent = `${this.winner === 'black' ? '黑方' : '白方'} 获胜！`;
+                    this.updateStatus();
+                    return;
+                }
+                this.currentPlayer = this.currentPlayer === 'black' ? 'white' : 'black';
+                this.updateStatus();
+                if (config.mode === 'pve' && !this.winner && this.currentPlayer !== config.mySide) {
+                    this.isAiThinking = true;
+                    this.msgEl.textContent = "AI 思考中...";
+                    setTimeout(() => this.aiTurn(), 600);
+                }
+            }
+            renderStone(r, c, player) {
+                const cell = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+                const stone = document.createElement('div');
+                stone.className = `stone ${player}`;
+                document.querySelectorAll('.last-move').forEach(el => el.classList.remove('last-move'));
+                stone.classList.add('last-move');
+                cell.appendChild(stone);
+                stone.offsetHeight; 
+                stone.classList.add('show');
+            }
+            undo() {
+                if (this.isReplaying || this.winner || this.isAiThinking || this.history.length === 0) return;
+                let steps = (config.mode === 'pve' && !(this.history.length === 1 && config.mySide === 'white')) ? 2 : 1;
+                for (let i = 0; i < steps; i++) {
+                    if (this.history.length === 0) break;
+                    const last = this.history.pop();
+                    this.boardData[last.r][last.c] = null;
+                    document.querySelector(`.cell[data-r="${last.r}"][data-c="${last.c}"] .stone`)?.remove();
+                    this.currentPlayer = last.player;
+                }
+                if (this.history.length > 0) {
+                    const last = this.history[this.history.length - 1];
+                    document.querySelector(`.cell[data-r="${last.r}"][data-c="${last.c}"] .stone`)?.classList.add('last-move');
+                }
+                this.updateStatus();
+                this.msgEl.textContent = "已悔棋";
+            }
+            aiTurn() {
+                let move;
+                if (config.difficulty === 'easy') {
+                    if (Math.random() < 0.15) move = this.getRandomMove();
+                    else move = this.getBestMoveHeuristic(0.5);
+                } else if (config.difficulty === 'normal') {
+                    move = this.getBestMoveHeuristic(1.0);
+                } else {
+                    move = this.getBestMoveMaster();
+                }
+                if (move) this.handleMove(move[0], move[1], true);
+                this.isAiThinking = false;
+            }
+            getRandomMove() {
+                const empties = [];
+                for(let r=0;r<15;r++) for(let c=0;c<15;c++) if(!this.boardData[r][c]) empties.push([r,c]);
+                return empties.length ? empties[Math.floor(Math.random()*empties.length)] : null;
+            }
+            getBestMoveHeuristic(defenseFactor = 1.0) {
+                const aiPlayer = this.currentPlayer;
+                const humanPlayer = aiPlayer === 'black' ? 'white' : 'black';
+                let bestScore = -Infinity;
+                let bestMoves = [];
+                const W = { win: 100000, blockWin: 50000, open4: 10000, blockOpen4: 8000, open3: 1000, center: 10 };
+                for (let r = 0; r < 15; r++) {
+                    for (let c = 0; c < 15; c++) {
+                        if (this.boardData[r][c]) continue;
+                        let score = 0;
+                        score += (14 - (Math.abs(r - 7) + Math.abs(c - 7))) * W.center;
+                        const attack = this.evaluatePoint(r, c, aiPlayer);
+                        const defense = this.evaluatePoint(r, c, humanPlayer);
+                        if (attack >= W.win) score += attack * 1.2;
+                        else if (defense >= W.win) score += defense * 1.1 * defenseFactor;
+                        else score += attack + (defense * defenseFactor);
+                        if (score > bestScore) { bestScore = score; bestMoves = [[r, c]]; }
+                        else if (score === bestScore) { bestMoves.push([r, c]); }
+                    }
+                }
+                return bestMoves.length ? bestMoves[Math.floor(Math.random() * bestMoves.length)] : null;
+            }
+            getBestMoveMaster() {
+                const candidates = this.getTopCandidates(8);
+                if (candidates.length === 0) return this.getRandomMove();
+                const aiPlayer = this.currentPlayer;
+                const humanPlayer = aiPlayer === 'black' ? 'white' : 'black';
+                let bestMove = candidates[0].move;
+                let maxVal = -Infinity;
+                for (const cand of candidates) {
+                    const {r, c} = cand.move;
+                    this.boardData[r][c] = aiPlayer;
+                    if (this.checkWin(r, c, aiPlayer)) { this.boardData[r][c] = null; return [r, c]; }
+                    const opponentResponse = this.getTopCandidates(1, humanPlayer)[0];
+                    let evalScore = cand.score;
+                    if (opponentResponse) {
+                        if (opponentResponse.score > 80000) evalScore = -100000;
+                        else evalScore -= opponentResponse.score * 0.8;
+                    }
+                    this.boardData[r][c] = null;
+                    if (evalScore > maxVal) { maxVal = evalScore; bestMove = [r, c]; }
+                }
+                return bestMove;
+            }
+            getTopCandidates(limit, player = this.currentPlayer) {
+                const moves = [];
+                const opponent = player === 'black' ? 'white' : 'black';
+                for (let r = 0; r < 15; r++) {
+                    for (let c = 0; c < 15; c++) {
+                        if (this.boardData[r][c]) continue;
+                        if (!this.hasNeighbor(r, c)) continue;
+                        const attack = this.evaluatePoint(r, c, player);
+                        const defense = this.evaluatePoint(r, c, opponent);
+                        let score = attack + defense;
+                        if (defense > attack) score = defense * 1.1 + attack;
+                        moves.push({ move: {r, c}, score: score });
+                    }
+                }
+                if (moves.length === 0) return [{move: {r:7, c:7}, score: 0}];
+                return moves.sort((a, b) => b.score - a.score).slice(0, limit);
+            }
+            hasNeighbor(r, c) {
+                for (let i = -2; i <= 2; i++) {
+                    for (let j = -2; j <= 2; j++) {
+                        if (i===0 && j===0) continue;
+                        const nr = r+i, nc = c+j;
+                        if (nr>=0 && nr<15 && nc>=0 && nc<15 && this.boardData[nr][nc]) return true;
+                    }
+                }
+                return false;
+            }
+            evaluatePoint(r, c, player) {
+                let total = 0;
+                const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+                for(let d of dirs) {
+                    let count=1, blocked=0;
+                    for(let i=1;;i++){
+                        let nr=r+d[0]*i, nc=c+d[1]*i;
+                        if(nr<0||nr>=15||nc<0||nc>=15){blocked++;break;}
+                        if(!this.boardData[nr][nc])break;
+                        if(this.boardData[nr][nc]!==player){blocked++;break;}
+                        count++;
+                    }
+                    for(let i=1;;i++){
+                        let nr=r-d[0]*i, nc=c-d[1]*i;
+                        if(nr<0||nr>=15||nc<0||nc>=15){blocked++;break;}
+                        if(!this.boardData[nr][nc])break;
+                        if(this.boardData[nr][nc]!==player){blocked++;break;}
+                        count++;
+                    }
+                    if(count>=5) total+=100000;
+                    else if(count===4 && blocked===0) total+=10000;
+                    else if(count===4 && blocked===1) total+=2000;
+                    else if(count===3 && blocked===0) total+=1000;
+                    else if(count===3 && blocked===1) total+=100;
+                    else if(count===2 && blocked===0) total+=100;
+                }
+                return total;
+            }
+            getHint() {
+                if (this.winner || this.isReplaying) return;
+                this.clearHint();
+                const move = this.getBestMoveMaster();
+                if (move) {
+                    const cell = document.querySelector(`.cell[data-r="${move[0]}"][data-c="${move[1]}"]`);
+                    const hint = document.createElement('div');
+                    hint.className = 'hint-mark';
+                    cell.appendChild(hint);
+                }
+            }
+            clearHint() { document.querySelectorAll('.hint-mark').forEach(el => el.remove()); }
+            checkWin(row, col, player) {
+                const directions = [[[0, 1], [0, -1]], [[1, 0], [-1, 0]], [[1, 1], [-1, -1]], [[1, -1], [-1, 1]]];
+                for (const direction of directions) {
+                    let line = [[row, col]];
+                    for (const [dx, dy] of direction) {
+                        let r = row + dx, c = col + dy;
+                        while (r >= 0 && r < 15 && c >= 0 && c < 15 && this.boardData[r][c] === player) {
+                            line.push([r, c]); r += dx; c += dy;
+                        }
+                    }
+                    if (line.length >= 5) return line;
+                }
+                return null;
+            }
+            highlightWin(line) {
+                line.forEach(([r, c]) => {
+                    document.querySelector(`.cell[data-r="${r}"][data-c="${c}"] .stone`)?.classList.add('winning');
+                });
+            }
+            updateStatus() {
+                document.getElementById('badge-black').classList.toggle('active', this.currentPlayer === 'black');
+                document.getElementById('badge-white').classList.toggle('active', this.currentPlayer === 'white');
+            }
+            enterReplayMode() {
+                if (!this.history.length) return;
+                this.isReplaying = true;
+                this.replayIndex = this.history.length;
+                document.getElementById('gameToolbar').style.display = 'none';
+                document.getElementById('replayBar').style.display = 'flex';
+                this.msgEl.textContent = "复盘模式";
+                this.renderReplayBoard();
+            }
+            exitReplay() {
+                this.isReplaying = false;
+                document.getElementById('gameToolbar').style.display = 'grid';
+                document.getElementById('replayBar').style.display = 'none';
+                this.boardData = Array(this.BOARD_SIZE).fill(null).map(() => Array(this.BOARD_SIZE).fill(null));
+                document.querySelectorAll('.stone').forEach(el => el.remove());
+                this.history.forEach(m => {
+                    this.boardData[m.r][m.c] = m.player;
+                    this.renderStone(m.r, m.c, m.player);
+                });
+                if (this.winner) {
+                    const last = this.history[this.history.length-1];
+                    const winLine = this.checkWin(last.r, last.c, last.player);
+                    if(winLine) this.highlightWin(winLine);
+                }
+            }
+            replayStep(dir) {
+                const next = this.replayIndex + dir;
+                if (next < 0 || next > this.history.length) return;
+                this.replayIndex = next;
+                this.renderReplayBoard();
+            }
+            replayJump(to) {
+                this.replayIndex = to === 'start' ? 0 : this.history.length;
+                this.renderReplayBoard();
+            }
+            renderReplayBoard() {
+                document.querySelectorAll('.stone').forEach(el => el.remove());
+                document.getElementById('replayStepInfo').textContent = `${this.replayIndex}/${this.history.length}`;
+                for (let i = 0; i < this.replayIndex; i++) {
+                    const m = this.history[i];
+                    this.renderStone(m.r, m.c, m.player);
+                }
+            }
+        }
+        const game = new GobangGame();
+    </script>
+</body>
+</html>
