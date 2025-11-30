@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五子棋 - 人机对战版</title>
+    <style>
+        :root {
+            --board-bg: #eecfa1;
+            --board-border: #d4a76a;
+            --line-color: rgba(60, 40, 20, 0.4);
+            --black-stone: radial-gradient(circle at 30% 30%, #666, #000);
+            --white-stone: radial-gradient(circle at 30% 30%, #fff, #d1d1d1);
+            --shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f5f5f4;
+            color: #444;
+            user-select: none;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            padding: 2rem;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
+            max-width: 95vw;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #292524;
+        }
+
+        /* 模式切换开关 */
+        .switch-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 22px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 22px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #292524; }
+        input:checked + .slider:before { transform: translateX(18px); }
+
+        /* 状态指示器 */
+        .status-bar {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+            justify-content: center;
+        }
+        .player-badge {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: all 0.3s;
+            opacity: 0.5;
+            transform: scale(0.9);
+        }
+        .player-badge.active {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+        .stone-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            box-shadow: var(--shadow);
+            margin-bottom: 4px;
+            position: relative;
+        }
+        .stone-icon.black { background: var(--black-stone); }
+        .stone-icon.white { background: var(--white-stone); border: 1px solid #ccc; }
+        
+        .thinking-dot {
+            position: absolute;
+            top: -4px; right: -4px;
+            width: 10px; height: 10px;
+            background: #22c55e;
+            border-radius: 50%;
+            display: none;
+            animation: pulse 1s infinite;
+        }
+        .active .thinking-dot { display: block; }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+
+        /* 棋盘 */
+        .board-wrapper {
+            padding: 10px;
+            background: var(--board-bg);
+            border-radius: 4px;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.2);
+            border: 6px solid var(--board-border);
+            position: relative;
+        }
+
+        #board {
+            display: grid;
+            grid-template-columns: repeat(15, 1fr);
+            grid-template-rows: repeat(15, 1fr);
+            width: min(85vw, 450px);
+            height: min(85vw, 450px);
+            position: relative;
+        }
+
+        .cell {
+            position: relative;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* 网格线 */
+        .cell::before {
+            content: '';
+            position: absolute;
+            top: 50%; left: 0; width: 100%; height: 1px;
+            background: var(--line-color);
+            z-index: 0;
+        }
+        .cell::after {
+            content: '';
+            position: absolute;
+            left: 50%; top: 0; height: 100%; width: 1px;
+            background: var(--line-color);
+            z-index: 0;
+        }
+
+        /* 天元和星位 */
+        .star-point {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: #333;
+            border-radius: 50%;
+            z-index: 1;
+        }
+
+        /* 棋子 */
+        .stone {
+            width: 85%;
+            height: 85%;
+            border-radius: 50%;
+            z-index: 2;
+            box-shadow: var(--shadow);
+            transform: scale(0);
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .stone.show { transform: scale(1); }
+        .stone.black { background: var(--black-stone); }
+        .stone.white { background: var(--white-stone); }
+        
+        .stone.winning {
+            box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.6);
+        }
+
+        /* 控制区 */
+        .controls {
+            text-align: center;
+            width: 100%;
+        }
+        .msg {
+            height: 24px;
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+        .btn {
+            background: #292524;
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn:hover { background: #44403c; }
+        .btn svg { width: 16px; height: 16px; }
+
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div class="header">
+            <label class="switch-container">
+                <div class="switch">
+                    <input type="checkbox" id="modeToggle" checked>
+                    <span class="slider"></span>
+                </div>
+                <span id="modeText">人机对战</span>
+            </label>
+            <div class="title">五子棋</div>
+            <div style="width: 60px;"></div> <!-- 占位符 -->
+        </div>
+
+        <div class="status-bar">
+            <div class="player-badge active" id="badge-black">
+                <div class="stone-icon black"><div class="thinking-dot"></div></div>
+                <span>玩家 (黑)</span>
+            </div>
+            <div style="font-size: 1.5rem; color: #ccc;">VS</div>
+            <div class="player-badge" id="badge-white">
+                <div class="stone-icon white"><div class="thinking-dot"></div></div>
+                <span id="white-label">电脑 (白)</span>
+            </div>
+        </div>
+
+        <div class="board-wrapper">
+            <div id="board"></div>
+        </div>
+
+        <div class="controls">
+            <div class="msg" id="message">轮到黑方落子</div>
+            <button class="btn" onclick="game.reset()">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74-2.74L3 12"/></svg>
+                重新开始
+            </button>
+        </div>
+    </div>
+
+    <script>
+        class GobangGame {
+            constructor() {
+                this.BOARD_SIZE = 15;
+                this.boardData = [];
+                this.currentPlayer = 'black';
+                this.winner = null;
+                this.isPvE = true;
+                this.isAiThinking = false;
+                this.domBoard = document.getElementById('board');
+                this.msgEl = document.getElementById('message');
+                
+                this.initBoard();
+                this.bindEvents();
+                this.reset();
+            }
+
+            initBoard() {
+                this.domBoard.innerHTML = '';
+                for (let r = 0; r < this.BOARD_SIZE; r++) {
+                    for (let c = 0; c < this.BOARD_SIZE; c++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.dataset.r = r;
+                        cell.dataset.c = c;
+                        
+                        // 绘制星位
+                        if ((r === 3 || r === 11 || r === 7) && (c === 3 || c === 11 || c === 7)) {
+                            const star = document.createElement('div');
+                            star.className = 'star-point';
+                            cell.appendChild(star);
+                        }
+
+                        cell.addEventListener('click', () => this.handleMove(r, c));
+                        this.domBoard.appendChild(cell);
+                    }
+                }
+            }
+
+            bindEvents() {
+                const modeToggle = document.getElementById('modeToggle');
+                modeToggle.addEventListener('change', (e) => {
+                    this.isPvE = e.target.checked;
+                    document.getElementById('modeText').textContent = this.isPvE ? '人机对战' : '双人对战';
+                    document.getElementById('white-label').textContent = this.isPvE ? '电脑 (白)' : '玩家 (白)';
+                    this.reset();
+                });
+            }
+
+            reset() {
+                this.boardData = Array(this.BOARD_SIZE).fill(null).map(() => Array(this.BOARD_SIZE).fill(null));
+                this.currentPlayer = 'black';
+                this.winner = null;
+                this.isAiThinking = false;
+                
+                // 清除棋盘视觉
+                document.querySelectorAll('.stone').forEach(el => el.remove());
+                document.querySelectorAll('.cell').forEach(el => el.style.cursor = 'pointer');
+                
+                this.updateStatus();
+            }
+
+            updateStatus() {
+                const blackBadge = document.getElementById('badge-black');
+                const whiteBadge = document.getElementById('badge-white');
+                
+                blackBadge.classList.toggle('active', this.currentPlayer === 'black' && !this.winner);
+                whiteBadge.classList.toggle('active', this.currentPlayer === 'white' && !this.winner);
+
+                if (this.winner) {
+                    this.msgEl.textContent = `${this.winner === 'black' ? '黑方' : '白方'} 获胜！`;
+                    this.msgEl.style.color = '#22c55e';
+                    this.msgEl.style.fontWeight = 'bold';
+                } else {
+                    this.msgEl.style.color = '#666';
+                    this.msgEl.style.fontWeight = 'normal';
+                    if (this.isPvE && this.currentPlayer === 'white') {
+                        this.msgEl.textContent = 'AI 思考中...';
+                    } else {
+                        this.msgEl.textContent = `轮到 ${this.currentPlayer === 'black' ? '黑方' : '白方'} 落子`;
+                    }
+                }
+            }
+
+            handleMove(r, c, isAi = false) {
+                if (this.winner || this.boardData[r][c] || this.isAiThinking) return;
+                if (this.isPvE && this.currentPlayer === 'white' && !isAi) return;
+
+                // 逻辑落子
+                this.boardData[r][c] = this.currentPlayer;
+                
+                // 视觉落子
+                const cell = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+                const stone = document.createElement('div');
+                stone.className = `stone ${this.currentPlayer}`;
+                cell.appendChild(stone);
+                // 强制重绘以触发动画
+                stone.offsetHeight; 
+                stone.classList.add('show');
+
+                // 检查胜利
+                const winLine = this.checkWin(r, c, this.currentPlayer);
+                if (winLine) {
+                    this.winner = this.currentPlayer;
+                    this.highlightWin(winLine);
+                    this.updateStatus();
+                    return;
+                }
+
+                // 切换回合
+                this.currentPlayer = this.currentPlayer === 'black' ? 'white' : 'black';
+                this.updateStatus();
+
+                // 触发AI
+                if (this.isPvE && this.currentPlayer === 'white' && !this.winner) {
+                    this.isAiThinking = true;
+                    setTimeout(() => this.aiMove(), 600);
+                }
+            }
+
+            highlightWin(line) {
+                line.forEach(([r, c]) => {
+                    const cell = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+                    const stone = cell.querySelector('.stone');
+                    if (stone) stone.classList.add('winning');
+                });
+            }
+
+            checkWin(row, col, player) {
+                const directions = [
+                    [[0, 1], [0, -1]], // 横
+                    [[1, 0], [-1, 0]], // 竖
+                    [[1, 1], [-1, -1]], // 斜
+                    [[1, -1], [-1, 1]]  // 反斜
+                ];
+
+                for (const direction of directions) {
+                    let line = [[row, col]];
+                    for (const [dx, dy] of direction) {
+                        let r = row + dx;
+                        let c = col + dy;
+                        while (r >= 0 && r < this.BOARD_SIZE && c >= 0 && c < this.BOARD_SIZE && this.boardData[r][c] === player) {
+                            line.push([r, c]);
+                            r += dx;
+                            c += dy;
+                        }
+                    }
+                    if (line.length >= 5) return line;
+                }
+                return null;
+            }
+
+            // --- AI 逻辑 (与 React 版一致) ---
+            aiMove() {
+                const aiPlayer = 'white';
+                const humanPlayer = 'black';
+                let bestScore = -Infinity;
+                let bestMoves = [];
+
+                const weights = {
+                    win: 100000,
+                    blockWin: 50000,
+                    open4: 10000,
+                    blockOpen4: 8000,
+                    open3: 1000,
+                    blockOpen3: 800,
+                    center: 10
+                };
+
+                for (let r = 0; r < this.BOARD_SIZE; r++) {
+                    for (let c = 0; c < this.BOARD_SIZE; c++) {
+                        if (this.boardData[r][c]) continue;
+
+                        let score = 0;
+                        // 中心加分
+                        const centerDist = Math.abs(r - 7) + Math.abs(c - 7);
+                        score += (14 - centerDist) * weights.center;
+
+                        const attackScore = this.evaluatePoint(r, c, aiPlayer);
+                        const defenseScore = this.evaluatePoint(r, c, humanPlayer);
+
+                        if (attackScore >= weights.win) score += attackScore * 1.2;
+                        else if (defenseScore >= weights.win) score += defenseScore * 1.1;
+                        else score += attackScore + defenseScore;
+
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestMoves = [[r, c]];
+                        } else if (score === bestScore) {
+                            bestMoves.push([r, c]);
+                        }
+                    }
+                }
+
+                this.isAiThinking = false;
+                if (bestMoves.length > 0) {
+                    const move = bestMoves[Math.floor(Math.random() * bestMoves.length)];
+                    this.handleMove(move[0], move[1], true);
+                }
+            }
+
+            evaluatePoint(r, c, player) {
+                let totalScore = 0;
+                const directions = [[0, 1], [1, 0], [1, 1], [1, -1]];
+
+                for (const [dx, dy] of directions) {
+                    let count = 1;
+                    let blocked = 0;
+                    
+                    // 正向
+                    let i = 1;
+                    while (true) {
+                        const nr = r + dx * i, nc = c + dy * i;
+                        if (nr < 0 || nr >= this.BOARD_SIZE || nc < 0 || nc >= this.BOARD_SIZE) { blocked++; break; }
+                        if (this.boardData[nr][nc] === null) break;
+                        if (this.boardData[nr][nc] !== player) { blocked++; break; }
+                        count++;
+                        i++;
+                    }
+                    // 反向
+                    i = 1;
+                    while (true) {
+                        const nr = r - dx * i, nc = c - dy * i;
+                        if (nr < 0 || nr >= this.BOARD_SIZE || nc < 0 || nc >= this.BOARD_SIZE) { blocked++; break; }
+                        if (this.boardData[nr][nc] === null) break;
+                        if (this.boardData[nr][nc] !== player) { blocked++; break; }
+                        count++;
+                        i++;
+                    }
+
+                    if (count >= 5) totalScore += 100000;
+                    else if (count === 4 && blocked === 0) totalScore += 10000;
+                    else if (count === 4 && blocked === 1) totalScore += 2000;
+                    else if (count === 3 && blocked === 0) totalScore += 1000;
+                    else if (count === 3 && blocked === 1) totalScore += 100;
+                    else if (count === 2 && blocked === 0) totalScore += 100;
+                }
+                return totalScore;
+            }
+        }
+
+        // 启动游戏
+        const game = new GobangGame();
+    </script>
+</body>
+</html>
