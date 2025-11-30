@@ -8,7 +8,7 @@
 
 > **提示**：在 Safari (iOS) 或 Chrome (Android) 中点击 "分享" -> "添加到主屏幕"，体验更佳！
 
-[点击这里在浏览器打开](https://yanlinson.github.io/AIPD_test/)
+[点击这里用浏览器打开](https://yanlinson.github.io/AIPD_test/)
 
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
