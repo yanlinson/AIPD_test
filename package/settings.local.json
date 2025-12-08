@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/git-auto-tag-v2/dist/hook.js",
+            "timeout": 30000
+          }
+        ]
+      }
+    ]
+  }
+}
